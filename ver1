@@ -1,0 +1,109 @@
+
+import tkinter as tk
+import pandas as pd
+from pandas import DataFrame
+from tkinter import messagebox
+from tkinter import font as tkFont
+from tkinter import filedialog
+import os
+
+class Application:
+    def __init__(self, window):
+        self.window = window  # Store the window as an instance variable
+        window.geometry("800x700")
+        window.title("Readmission Prediction Tool")
+        window.configure(bg="#051a1c")
+        self.button_style = {
+            'bg': '#90ee90',  # Light green background
+            'fg': 'black',  # Text color
+            'bd': 1,  # Border width
+            'relief': 'groove',  # Border style
+            'highlightthickness': 5,  # No highlight border
+            'padx': 20,  # Horizontal padding
+            'pady': 10,  # Vertical padding
+        }
+
+        self.welcomePage()
+
+
+    def is_excel_file(self,file_path):
+        return file_path.lower().endswith(('.xls', '.xlsx', '.xlsm'))
+
+    def is_csv_file(self,file_path):
+        return file_path.lower().endswith('.csv')
+
+    def convert_excel_to_csv(self,excel_file_path):
+        # Load the Excel file
+        df = pd.read_excel(excel_file_path)
+        # Generate the CSV file path by changing the extension
+        csv_file_path = os.path.splitext(excel_file_path)[0] + '.csv'
+        # Save the DataFrame to CSV
+        df.to_csv(csv_file_path, index=False)
+        return csv_file_path
+
+    def uploadCSV(self):
+        file_path = filedialog.askopenfilename()
+        if self.is_excel_file(file_path):
+            file_path = self.convert_excel_to_csv(file_path)
+        if not self.is_csv_file(file_path):
+            messagebox.showerror("Error", "The selected file is not a CSV or Excel file. Please select a different file.")
+        self.df = pd.read_csv(file_path)
+
+    def generateButtonsFromCols(self, column_names):
+        # Clear the previous buttons by destroying all widgets in the button frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+
+        # Create a button for each column name and add it to the grid
+        row, col = 0, 0
+        for col_name in column_names:
+            button = tk.Button(self.button_frame, text=col_name, **self.button_style)
+            button.grid(row=row, column=col, sticky='nsew', padx=5, pady=5)
+            col += 1
+            if col >= self.calculate_max_columns()-5:
+                row += 1
+                col = 0
+
+        # Configure the grid to have equal column widths
+        for i in range(col):
+            self.button_frame.grid_columnconfigure(i, weight=1)
+
+    def calculate_max_columns(self):
+        # Calculate the maximum number of columns that can fit in the frame
+        frame_width = self.button_frame.winfo_width()
+        button_width = 100  # Approximate button width; adjust as needed
+        return max(frame_width // button_width, 1)
+
+
+    def genrateGraph(self):
+        df = self.df
+        if df.empty:
+            messagebox.showerror("Error", "must provide a CSV file first.")
+        column_lists = {column: df[column].tolist() for column in df.columns} #this is a dict in format colName : colData[]
+        column_name = column_lists.keys()
+        self.generateButtonsFromCols(column_name)
+
+    def welcomePage(self):
+        self.button_frame = tk.Frame(self.window, bg='#051a1c')
+        self.button_frame.pack(side=tk.BOTTOM, fill='x', expand=True)
+
+
+        button = tk.Button(self.button_frame, text="Upload CSV", command = self.uploadCSV ,height=5, width=20,**self.button_style)
+        button1 = tk.Button(self.button_frame, text="Genrate Graph",command = self.genrateGraph, height=5, width=20,**self.button_style)
+        button2 = tk.Button(self.button_frame, text="Generate Filtered Graph", height=5, width=20,**self.button_style)
+        button3 = tk.Button(self.button_frame, text="Train Machine Learning Model", height=5, width=20,**self.button_style)
+        button4 = tk.Button(self.button_frame, text="Make ML Predictions", height=5, width=20,**self.button_style)
+
+        button.grid(row=0, column=1, padx=5, pady=5,sticky='e')
+        button1.grid(row=0, column=2, padx=5, pady=5,sticky='e')
+        button2.grid(row=1, column=0, padx=5, pady=(20,150),sticky='e')
+        button3.grid(row=1, column=1, padx=5, pady=(20,150),sticky='e')
+        button4.grid(row=1, column=2, padx=5, pady=(20,150),sticky='e')
+
+
+if __name__ == "__main__":
+    window = tk.Tk()
+    app = Application(window)
+    #window.pack_propagate(False)
+    #window.resizable(False, False)
+    window.mainloop()

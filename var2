@@ -1,0 +1,730 @@
+
+import tkinter as tk
+import pandas as pd
+import json
+import numpy as np
+from pandas import DataFrame
+from tkinter import messagebox
+from tkinter import font as tkFont
+from tkinter import filedialog
+import matplotlib.pyplot as plt
+from collections import Counter
+import os
+import re
+from pandas import DataFrame
+from tkinter import messagebox
+from tkinter import filedialog
+import matplotlib.pyplot as plt
+from collections import Counter
+import os
+import re
+import pickle  # Import pickle for saving and loading models
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import roc_curve, auc, confusion_matrix, classification_report, accuracy_score, precision_score, \
+    recall_score, f1_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.neighbors import KNeighborsClassifier
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import seaborn as sns
+from sklearn.decomposition import PCA
+from sklearn import metrics
+from datetime import datetime
+
+
+
+class Application:
+    def __init__(self, window):
+        self.window = window  # Store the window as an instance variable
+        window.geometry("800x700")
+        window.title("Readmission Prediction Tool")
+        window.configure(bg="#051a1c")
+        self.button_style = {
+            'bg': '#90ee90',  # Light green background
+            'fg': 'black',  # Text color
+            'bd': 1,  # Border width
+            'relief': 'groove',  # Border style
+            'highlightthickness': 5,  # No highlight border
+            'padx': 20,  # Horizontal padding
+            'pady': 10,  # Vertical padding
+        }
+        self.jason_file = "data.json"
+        with open(self.jason_file, 'r') as file:
+            try:
+                path = json.load(file)
+                if path:
+                    self.df = pd.read_csv(path,index_col=0)
+            except json.JSONDecodeError:
+                messagebox.showerror("Error", "missing a CSV file path, please load CSV file first.")
+        self.welcomePage()
+
+    def is_date(self, string):
+        date_pattern = r'\b\d{4}-\d{1,2}-\d{1,2}\b'
+        match = re.search(date_pattern, string)
+        if match:
+            return True
+        else:
+            return False
+    def is_not_empty_or_whitespace(self,s):
+        return bool(s.strip())
+
+    def extractDate(self, string):
+        date_pattern = r'\b\d{4}-\d{1,2}-\d{1,2}\b'
+        match = re.search(date_pattern, string)
+        if match:
+            matched_date = match.group()
+            return matched_date
+        else:
+            return None
+    def is_hour(self,string):
+        hour_pattern = r'\b\d{2}:\d{2}:\d{2}\b'
+        match = re.search(hour_pattern, string)
+        if match:
+            return True
+        else:
+            return False
+
+    def extractHour(self, string):
+        hour_pattern = r'\b\d{2}:\d{2}:\d{2}\b'
+        match = re.search(hour_pattern, string)
+        if match:
+            matched_hour = match.group()
+            return matched_hour
+        else:
+            return None
+
+    def is_excel_file(self,file_path):
+        return file_path.lower().endswith(('.xls', '.xlsx', '.xlsm'))
+
+    def is_csv_file(self,file_path):
+        return file_path.lower().endswith('.csv')
+
+    def is_hebrew(self,word):
+        for char in word:
+            if '\u0590' <= char <= '\u05FF':
+                return True
+        return False
+    def convert_excel_to_csv(self,excel_file_path):
+        # Load the Excel file
+        df = pd.read_excel(excel_file_path)
+        # Generate the CSV file path by changing the extension
+        csv_file_path = os.path.splitext(excel_file_path)[0] + '.csv'
+        # Save the DataFrame to CSV
+        df.to_csv(csv_file_path, index=False)
+        return csv_file_path
+
+    def is_date_col(self, column_data):
+        # check if has a date format - if 10 first elements contains date format its safe to say this is a date and hour column
+        for i in range(min(10, len(column_data))):
+            if not self.is_date(column_data[i]) and column_data[i]!= ' ':
+                return False
+        return True
+
+    def uploadCSV(self):
+        file_path = filedialog.askopenfilename()
+        if self.is_excel_file(file_path):
+            file_path = self.convert_excel_to_csv(file_path)
+        if not self.is_csv_file(file_path):
+            messagebox.showerror("Error", "The selected file is not a CSV or Excel file. Please select a different file.")
+        self.df = pd.read_csv(file_path,index_col=0)
+        self.file_path = file_path
+        with open(self.jason_file, 'w') as file:
+            json.dump(file_path, file)
+
+    def get_day_of_week(self,date_string):
+        date_format = "%Y-%m-%d"
+        print(date_string)
+        # Parse the date string into a datetime object
+        date_obj = datetime.strptime(date_string, date_format)
+        # Format the datetime object to get the day of the week
+        # %A returns the full weekday name
+        day_of_week = date_obj.strftime("%A")
+        return day_of_week
+
+    def get_month_name(self,date_string, date_format="%Y-%m-%d"):
+        # Parse the date string into a datetime object
+        date_obj = datetime.strptime(date_string, date_format)
+        # Format the datetime object to get the full month name
+        month_name = date_obj.strftime("%B")
+        return month_name
+
+    def handle_date_data(self,selectedParameter):
+        if selectedParameter == "sort by hours":
+            return self.dates_data["hour"]
+        elif selectedParameter == "sort by the day of the week":
+            allDays = []
+            for date in self.dates_data["date"]:
+                day= self.get_day_of_week(date)
+                allDays.append(day)
+            return allDays
+        elif selectedParameter == "sort by months":
+            allMonths = []
+            for date in self.dates_data["date"]:
+                month = self.get_month_name(date)
+                allMonths.append(month)
+            return allMonths
+
+        elif selectedParameter == "daily data within a month":
+            allMonths =[]
+            for date in self.dates_data["date"]:
+                specific_month = date.split("-")[0:2]
+                allMonths.append(specific_month)
+            self.specific_month_display = list(set([i+"-"+j for i,j in allMonths]))
+            print(self.specific_month_display)
+            #self.generateListboxForGraph(self.dates_data["date"])
+            pass
+
+        elif selectedParameter == "sort by years":
+            all_years=[]
+            for date in self.dates_data["date"]:
+                year = date.split("-")[0]
+                all_years.append(year)
+            return all_years
+
+
+    def handle_data(self,selectedParameter):
+        if self.df.empty:
+            messagebox.showerror("Error", "No data available to plot.")
+            return
+
+            # Plot the graph using the selected column
+        column_data = self.df[selectedParameter]
+        column_data = [x for x in column_data if not pd.isna(x)]
+        parameters = [str(value) for value in column_data]  # Convert each value to string
+        if selectedParameter == "רופא מאשפז":
+            pattern_to_remove = r'מ\.ר\.\d+'
+            all_cleaned_data = []
+            for parameter in parameters:
+                # Use re.sub() to replace the matched pattern with an empty string
+                cleaned_data = re.sub(pattern_to_remove, '', parameter).strip()
+                all_cleaned_data.append(cleaned_data)
+            parameters = all_cleaned_data
+        # Reverse Hebrew strings in the unique_parameters list
+        parameters = [param[::-1] if self.is_hebrew(param) else param for param in parameters]
+
+        # Check if the column is a date column and extract/format dates if necessary
+        if self.isNumericData(parameters):
+            parameters = self.sortParameters(parameters)
+
+        if self.is_date_col(parameters): # Assuming is_date_col checks the column name
+            date = [self.extractDate(parameter) for parameter in parameters if
+                    parameter and self.is_date(parameter)]
+            hour = [self.extractHour(parameter) for parameter in parameters if
+                    parameter and self.is_hour(parameter)]
+            hour = [h.split(":")[0] for h in hour]
+            hour = self.sortParameters(hour)
+            self.dates_data = {"hour": hour, "date": date}
+            self.dateMenu()
+        return parameters
+
+    def sortParameters(self,parameters):
+        parameters = [float(s) for s in parameters]
+        parameters = sorted(parameters)
+        parameters = [str(value) for value in parameters]# Convert each value to string
+        return parameters
+
+    def plotGraph(self, data,selectedParameter):
+            value_counts = Counter(data)
+            frequencies = list(value_counts.values())
+            unique_parameters = list(value_counts.keys())  # Get the unique parameters]
+
+            # Set the font to a font that supports Hebrew characters
+            plt.rcParams['font.family'] = 'David'
+            plt.figure()
+
+            # Plot the bar graph using the unique_parameters and frequencies
+            bars = plt.bar(unique_parameters, frequencies)
+            for bar in bars:
+                y_value = bar.get_height()
+                plt.text(bar.get_x() + bar.get_width() / 2, y_value, f'{y_value}', ha='center', va='bottom')
+
+            # Reverse the selectedParameter if it's in Hebrew
+            if self.is_hebrew(selectedParameter):
+                selectedParameter = selectedParameter[::-1]
+
+            # Customize the plot
+            plt.title(selectedParameter, fontsize=10)
+            plt.xlabel('Parameters', fontsize=8)
+            plt.ylabel('Frequency', fontsize=8)
+            plt.xticks(fontsize=8, ha='right')  # Set x-axis labels
+
+            # Show the plot
+            plt.show()
+
+    def isNumericData(self,parameters):
+        for value in parameters:
+            try:
+                float(value)
+                return True
+            except ValueError:
+                return False
+
+    def generateListboxForGraph(self, column_names):
+        # Clear the previous widgets by destroying all widgets in the button frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+
+        self.header_label = tk.Label(self.button_frame, text="Select parameter", bg="#051a1c", fg="white")
+        self.header_label.pack(side='top', fill='x')
+
+        # Create a Listbox for column names with single selection mode
+        self.listbox = tk.Listbox(self.button_frame, selectmode='single', exportselection=False)
+        for col_name in column_names:
+            self.listbox.insert('end', col_name)
+        self.listbox.pack(side='left', fill='both', expand=True)
+
+        # Create a frame to hold the buttons
+        button_frame = tk.Frame(self.button_frame,bg='#051a1c')
+        button_frame.pack(side='top', fill='x')
+
+        # Create a button to confirm the selection
+        confirm_button = tk.Button(button_frame, text="Confirm Selection", command=self.confirm_selection_for_graph)
+        confirm_button.pack(side='top', fill='x', padx=10, pady=10)
+
+        # Create a button to go back to the main menu
+        back_button = tk.Button(button_frame, text="Back To Main Menu", command=self.welcomePage)
+        back_button.pack(side='top', fill='x', padx=10, pady=10)
+
+    def dateMenu(self):
+        parameters = ["sort by hours","sort by the day of the week","sort by months", "daily data within a month","sort by years"]
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        self.generateListboxForGraph(parameters)
+
+
+
+    def genrateGraph(self):
+        if self.df.empty:
+            messagebox.showerror("Error", "Please provide a CSV file first.")
+            return
+    # Set up the listbox for user selection for a regular graph
+        col_names = []
+        for col in self.df.columns:
+            if not self.df[col].isna().all():
+                col_names.append(col)
+
+        self.generateListboxForGraph(col_names)
+    # Set a flag to indicate that we are generating a regular graph
+        self.graph_type = 'regular'
+
+
+    def genrateFilteredGraph(self):
+        if self.df.empty:
+            messagebox.showerror("Error", "Please provide a CSV file first.")
+            return
+        # Initiate the first selection for the filter
+        col_names = []
+        for col in self.df.columns:
+            if not self.df[col].isna().all():
+                col_names.append(col)
+        self.generateListboxForGraph(col_names)
+        self.header_label.config(text="Choose a filter type")
+        # Set a flag to indicate that we are in the first step of filtered graph generation
+        self.graph_type = 'filter_type_selection'
+
+    def handle_filter_selection(self, filter_column):
+        # Now initiate the second selection for the actual data parameter
+        col_names = []
+        for col in self.df.columns:
+            if not self.df[col].isna().all():
+                col_names.append(col)
+        self.generateListboxForGraph([col for col in col_names if col != filter_column])
+        self.header_label.config(text="Choose a parameter")
+        # Set a flag to indicate that we are in the second step of filtered graph generation
+        self.graph_type = 'parameter_selection'
+        # Store the selected filter column for later use
+
+    def confirm_selection_for_graph(self):
+        selection_index = self.listbox.curselection()
+        if not selection_index:
+            messagebox.showerror("Error", "Please select an option.")
+            return
+
+        selected_column = self.listbox.get(selection_index[0])
+
+        if self.graph_type == 'regular':
+            # The user has selected the parameter for a regular graph; generate the graph
+            data = self.handle_data(selected_column)
+            if self.is_date_col(data):
+                self.graph_type = 'date'
+            else:
+                self.plotGraph(data,selected_column)
+
+        elif self.graph_type =='date':
+            data = self.handle_date_data(selected_column)
+            self.plotGraph(data,selected_column)
+
+        elif self.graph_type == 'filter_selection':
+            # The user has selected the filter; handle the parameter selection
+            self.handle_filter_selection(self.filter_column)
+            self.filter = selected_column
+            print("selected filter:",self.filter)
+
+        elif self.graph_type == 'filter_type_selection':
+            self.choose_filter(selected_column)
+            self.filter_column = selected_column
+
+        elif self.graph_type == 'parameter_selection':
+            # The user has selected the parameter; generate the filtered graph
+            print("Selected filter type:", self.filter_column)
+            print("Selected parameter:", selected_column)
+            self.plotFilteredGraph(selected_column,self.filter,self.filter_column)
+
+    def plotFilteredGraph(self, selected_option, selected_filter, filter_column):
+        if self.df.empty:
+            messagebox.showerror("Error", "No data available to plot.")
+            return
+
+        # Drop rows with NaN values in either the selected_option column or the filter_column
+        df_cleaned = self.df.dropna(subset=[selected_option, filter_column])
+
+        # Initialize an empty list to store the values that match the selected filter
+        filtered_values = []
+
+        # Iterate over the DataFrame rows
+        for index, row in df_cleaned.iterrows():
+            # Check if the value in the filter_column matches the selected_filter
+            if row[filter_column] == selected_filter:
+                # If it matches, add the corresponding value from selected_option to the list
+                filtered_values.append(row[selected_option])
+
+        # Calculate the frequencies of each unique value in the filtered list
+        value_counts = Counter(filtered_values)
+
+        # Separate the unique values and their frequencies
+        unique_values = [str(value) for value in value_counts.keys()]  # Convert each value to string
+        frequencies = list(value_counts.values())
+        for value in unique_values:
+            if self.is_hebrew(value):
+                value = value[::-1]
+        # Plot the bar graph
+        plt.figure(figsize=(10, 5))  # Optional: specify the figure size
+        plt.bar(unique_values, frequencies, color='skyblue')  # You can choose your own color
+
+        # Customize the plot
+        if self.is_hebrew(selected_option):
+            selected_option = selected_option[::-1]
+        if self.is_hebrew(selected_filter):
+            selected_filter = selected_filter[::-1]
+        plt.title(f'Frequency of {selected_option} for {selected_filter}')
+        plt.xlabel(selected_option)
+        plt.ylabel('Frequency')
+
+        # Rotate the x-axis labels for better readability if necessary
+        plt.xticks(rotation=45, ha='right')
+
+        # Show the plot
+        plt.show()
+
+    def choose_filter(self,selected_option):
+        self.generateListboxForGraph(self.df[selected_option].unique())
+        self.header_label.config(text="Choose a filter")
+        # Set a flag to indicate that we are in the second step of filtered graph generation
+        self.graph_type = 'filter_selection'
+        # Store the selected filter column for later use
+
+    def trainModelPage(self):
+        # Clear the previous widgets by destroying all widgets in the button frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+
+        self.header_label = tk.Label(self.button_frame, text="Select Machine Learning Algorithm", bg="#051a1c",
+                                     fg="white")
+        self.header_label.pack(side='top', fill='x')
+
+        # Create buttons for different machine learning algorithms
+        linear_regression_button = tk.Button(self.button_frame, text="Linear Regression",
+                                             command=self.train_linear_regression, **self.button_style)
+        decision_trees_button = tk.Button(self.button_frame, text="Decision Trees",
+                                          command=self.train_decision_trees, **self.button_style)
+        support_vector_machines_button = tk.Button(self.button_frame, text="Support Vector Machines",
+                                                   command=self.train_support_vector_machines, **self.button_style)
+        k_nearest_neighbors_button = tk.Button(self.button_frame, text="K-Nearest Neighbors",
+                                               command=self.train_k_nearest_neighbors, **self.button_style)
+
+        linear_regression_button.pack(side='top', fill='x', pady=5)
+        decision_trees_button.pack(side='top', fill='x', pady=5)
+        support_vector_machines_button.pack(side='top', fill='x', pady=5)
+        k_nearest_neighbors_button.pack(side='top', fill='x', pady=5)
+
+        # Button to go back to the home page
+        back_button = tk.Button(self.button_frame, text="Back to Home", command=self.welcomePage, height=2, width=15,
+                                **self.button_style)
+        back_button.pack(side='bottom', pady=10)
+
+        # Button to save the trained model
+        save_button = tk.Button(self.button_frame, text="Save Trained Model", command=self.saveTrainedModel, height=2,
+                                width=15,
+                                **self.button_style)
+        save_button.pack(side='bottom', pady=10)
+
+    def saveTrainedModel(self):
+        # Check if a model has been trained
+        if hasattr(self, 'trained_model') and self.trained_model:
+            # Save the trained model using pickle
+            model_filename = f"{self.trained_model.lower().replace(' ', '_')}_model.pkl"
+            with open(model_filename, 'wb') as file:
+                pickle.dump(self.trained_model, file)
+            messagebox.showinfo("Success", f"{self.trained_model} model saved as {model_filename}.")
+        else:
+            messagebox.showerror("Error", "No model has been trained yet.")
+
+    def trainMLModel(self, algorithm):
+        # Check if the DataFrame is not empty and an algorithm is selected
+        if not self.df.empty and algorithm:
+            # Specify the column names for variables and target
+            predictor_columns = ['זמן (בימים) מהשחרור הראשון ועד לאשפוז הבא', 'משך אשפוז']
+            target_column = 'זמן (בימים) מהשחרור הראשון ועד לאשפוז הבא'
+
+            # Prepare the data for training
+            X = self.df[predictor_columns]
+            y = self.df[target_column]
+
+            # Create and train the selected model
+            if algorithm == "Linear Regression":
+                model = LinearRegression()
+            elif algorithm == "Decision Trees":
+                model = DecisionTreeClassifier()
+            elif algorithm == "Support Vector Machines":
+                model = SVC()
+            elif algorithm == "K-Nearest Neighbors":
+                model = KNeighborsClassifier()
+            else:
+                messagebox.showerror("Error", "Invalid algorithm selected.")
+                return
+
+            model.fit(X, y)
+
+            # Save the trained model for later use
+            self.trained_model = model
+            self.predictor_columns = predictor_columns  # Save the predictor column names
+            self.actual_data_points = {'x': self.df['זמן (בימים) מהשחרור הראשון ועד לאשפוז הבא'],
+                                       'y': self.df['משך אשפוז']}
+            self.input_features = {'x': self.df['זמן (בימים) מהשחרור הראשון ועד לאשפוז הבא']}
+
+            messagebox.showinfo("Success", f"{algorithm} trained successfully.")
+        else:
+            messagebox.showerror("Error", "Please upload a CSV file and select a machine learning algorithm.")
+
+    def train_linear_regression(self):
+        self.trainMLModel("Linear Regression")
+
+    def train_decision_trees(self):
+        self.trainMLModel("Decision Trees")
+
+    def train_support_vector_machines(self):
+        self.trainMLModel("Support Vector Machines")
+
+    def train_k_nearest_neighbors(self):
+        self.trainMLModel("K-Nearest Neighbors")
+
+    def makePredictions(self, new_data):
+        if hasattr(self, 'trained_model'):
+            # Prepare the new data for prediction
+            X_new = new_data[self.predictor_columns]
+            if isinstance(self.trained_model, LinearRegression):
+                # Make predictions using the trained linear regression model
+                predictions = self.trained_model.predict(X_new)
+                return predictions
+            elif isinstance(self.trained_model, DecisionTreeClassifier):
+                predictions = self.trained_model.predict(X_new)
+                return predictions
+            elif isinstance(self.trained_model, SVC):
+                # Make binary predictions using the trained SVC model
+
+                predictions = self.trained_model.predict(X_new)
+
+                return predictions
+            elif isinstance(self.trained_model, KNeighborsClassifier):
+                predictions = self.trained_model.predict(X_new)
+                return predictions
+        else:
+            messagebox.showerror("Error", "No trained model available.")
+            return None
+
+    def predictionsPage(self):
+        # Clear the previous widgets by destroying all widgets in the button frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+
+        self.header_label = tk.Label(self.button_frame, text="Make Predictions", bg="#051a1c",
+                                     fg="white")
+        self.header_label.pack(side='top', fill='x')
+        make_predictions_button = tk.Button(self.button_frame, text="Make Predictions",
+                                            command=self.makeMLPredictions,
+                                            **self.button_style)
+        make_predictions_button.pack(side='top', fill='x', pady=5)
+        upload_file_button = tk.Button(self.button_frame, text="Upload New Data File", command=self.uploadNewDataFile,
+                                       **self.button_style)
+
+        upload_file_button.pack(side='top', fill='x', pady=5)
+
+    def uploadNewDataFile(self):
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            if self.is_excel_file(file_path):
+                file_path = self.convert_excel_to_csv(file_path)
+            if self.is_csv_file(file_path):
+                self.new_data = pd.read_csv(file_path)
+                messagebox.showinfo("Success", "New data file uploaded successfully.")
+            else:
+                messagebox.showerror("Error",
+                                     "The selected file is not a CSV or Excel file. Please select a different file.")
+
+    def makeMLPredictions(self):
+        if not self.df.empty:
+            predictions = self.makePredictions(self.df)
+            if predictions is not None:
+                # Navigate to the prediction results page
+                self.predictionResultsPage(predictions)
+        else:
+            messagebox.showerror("Error", "Please upload a CSV file first.")
+
+    def predictionResultsPage(self, predictions):
+        # Clear the previous widgets by destroying all widgets in the button frame
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+
+        self.header_label = tk.Label(self.button_frame, text="Prediction Results", bg="#051a1c", fg="white")
+        self.header_label.pack(side='top', fill='x')
+
+        # Open the prediction results in a new window
+        self.openPredictionWindow(predictions)
+
+        # Button to go back to the predictions page
+        back_button = tk.Button(self.button_frame, text="Back to Predictions", command=self.predictionsPage, height=2,
+                                width=15, **self.button_style)
+        back_button.pack(side='bottom', pady=10)
+
+    def openPredictionWindow(self, predictions):
+        # Create a new window for displaying the prediction results
+        prediction_window = tk.Toplevel(self.window)
+        prediction_window.title("Prediction Results")
+        prediction_window.geometry("800x600")
+        prediction_window.configure(bg="#051a1c")
+
+        # Create a figure and canvas for the plot
+        fig, ax = plt.subplots(figsize=(8, 6))
+        canvas = FigureCanvasTkAgg(fig, master=prediction_window)
+        canvas.get_tk_widget().pack(side='top', fill='both', expand=True)
+
+        # Get the input features for prediction
+        input_features = self.df[self.predictor_columns]
+
+        if isinstance(self.trained_model, LinearRegression):
+            # Display predictions as a scatter plot with linear regression line
+            ax.scatter(x=self.actual_data_points['x'], y=self.actual_data_points['y'], color='lightcoral',
+                       label='Actual Data')
+            ax.scatter(x=input_features['זמן (בימים) מהשחרור הראשון ועד לאשפוז הבא'], y=predictions, color='firebrick',
+                       label='Linear Regression Prediction')
+            ax.set_xlabel("Time (Days) from First Discharge to Next Hospitalization")
+            ax.set_ylabel("Predicted Time (Days)")
+            ax.set_title("Predicted Days between admissions")
+            ax.legend(['Actual Data', 'Linear Regression Prediction'], title='Legend', loc='best', facecolor='white')
+            ax.box(False)
+            plt.show(block=False)  # Show the plot without blocking the main window
+        elif isinstance(self.trained_model, DecisionTreeClassifier):
+            # Display predictions as a scatter plot with decision tree predictions
+            ax.clear()
+            # Create a scatter plot of actual vs. predicted values
+            ax.scatter(self.actual_data_points['y'], predictions, color='green', label='Decision Tree Prediction')
+            # Plot the diagonal line representing perfect predictions
+            min_value = min(self.actual_data_points['y'].min(), predictions.min())
+            max_value = max(self.actual_data_points['y'].max(), predictions.max())
+            ax.plot([min_value, max_value], [min_value, max_value], color='red', linestyle='--',
+                    label='Perfect Prediction')
+            ax.set_xlabel("Actual Time (Days)")
+            ax.set_ylabel("Predicted Time (Days)")
+            ax.set_title("Decision Tree: Actual vs. Predicted Readmission Days")
+            ax.legend(title='Legend', loc='best', facecolor='white')
+            ax.grid(True)
+
+        elif isinstance(self.trained_model, SVC):
+            # Perform PCA on the input features
+            pca = PCA(n_components=2)
+            x_pca = pca.fit_transform(input_features)
+
+            # Plot the PCA-transformed data points
+
+            ax.scatter(x_pca[:, 0], x_pca[:, 1], c=predictions, cmap='viridis', label='SVM Prediction')
+            ax.set_xlabel("Principal Component 1")
+            ax.set_ylabel("Principal Component 2")
+            ax.set_title("SVM Predictions with PCA")
+            ax.legend(title='Legend', loc='best', facecolor='white')
+            ax.grid(True)
+            # Create a new canvas for the PCA plot
+            canvas_pca = FigureCanvasTkAgg(fig, master=prediction_window)
+            canvas_pca.get_tk_widget().pack(side='top', fill='both', expand=True)
+
+            # Create a confusion matrix
+            cm = confusion_matrix(self.actual_data_points['y'], predictions)
+            # Create a new figure and axis for the confusion matrix
+            fig_cm, ax_cm = plt.subplots(figsize=(6, 6))
+
+            import plotly.express as px
+            # Plot the confusion matrix using seaborn heatmap
+            sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax_cm)
+            ax_cm.set_xlabel("Predicted Labels")
+            ax_cm.set_ylabel("True Labels")
+            ax_cm.set_title("Confusion Matrix")
+            fig = px.scatter(x_pca, x=0, y=1, color=input_features['species'])
+            fig.show()
+
+            # Perform PCA on the input features
+
+
+        elif isinstance(self.trained_model, KNeighborsClassifier):
+            # Display predictions as a scatter plot with k-nearest neighbors predictions
+            ax.clear()
+            ax.scatter(self.actual_data_points['x'], self.actual_data_points['y'], color='lightcoral',
+                       label='Actual Data')
+            ax.scatter(self.input_features['x'], predictions, color='blue', label='KNN Prediction')
+            ax.set_xlabel("Time (Days) from First Discharge to Next Hospitalization")
+            ax.set_ylabel("Predicted Time (Days)")
+            ax.set_title("Predicted Readmission Days")
+            ax.legend(['Actual Data', 'KNN Prediction'], title='Legend', loc='best', facecolor='white')
+            ax.box(False)
+
+        canvas.draw()
+
+        # Button to save the graph as a JPEG file
+        save_button = tk.Button(prediction_window, text="Save as JPEG", command=lambda: self.savePredictionGraph(fig),
+                                height=2, width=15, **self.button_style)
+        save_button.pack(side='bottom', pady=10)
+
+    def savePredictionResults(self):
+        # Implement saving prediction results as an image (JPEG)
+        # You can use libraries like matplotlib to plot the results and save as an image
+        # Example:
+        plt.plot([1, 2, 3, 4])
+        plt.ylabel('Predicted Values')
+        plt.savefig('prediction_results.jpg')
+
+    def welcomePage(self):
+        for widget in self.window.winfo_children():
+            widget.destroy()
+        self.button_frame = tk.Frame(self.window, bg='#051a1c')
+        self.button_frame.pack(side=tk.BOTTOM, fill='x', expand=True)
+
+        button = tk.Button(self.button_frame, text="Upload CSV", command = self.uploadCSV ,height=5, width=20,**self.button_style)
+        button1 = tk.Button(self.button_frame, text="Genrate Graph",command = self.genrateGraph, height=5, width=20,**self.button_style)
+        button2 = tk.Button(self.button_frame, text="Generate Filtered Graph", command = self.genrateFilteredGraph, height=5, width=20,**self.button_style)
+        button3 = tk.Button(self.button_frame, text="Train Machine Learning Model",command=self.trainModelPage, height=5, width=20,**self.button_style)
+        button4 = tk.Button(self.button_frame, text="Make ML Predictions", height=5, command=self.predictionsPage, width=20,**self.button_style)
+
+        button.grid(row=0, column=1, padx=5, pady=5,sticky='e')
+        button1.grid(row=0, column=2, padx=5, pady=5,sticky='e')
+        button2.grid(row=1, column=0, padx=5, pady=(20,150),sticky='e')
+        button3.grid(row=1, column=1, padx=5, pady=(20,150),sticky='e')
+        button4.grid(row=1, column=2, padx=5, pady=(20,150),sticky='e')
+
+
+if __name__ == "__main__":
+    window = tk.Tk()
+    app = Application(window)
+    #window.pack_propagate(False)
+    #window.resizable(False, False)
+    window.mainloop()
